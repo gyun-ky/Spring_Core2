@@ -52,9 +52,96 @@ public class ProxyApplication {
 
 ### 대리자(Proxy)의 필수 조건 
 * 서버와 프록시는 같은 interface를 사용해야 함 -> 클라이언트가 서버에 요청을 한 것인지, 프록시에 요청을 한 것인지 몰라야 함.
-* 서버 객체를 프록시 객체로 대체해도 동작해야 함. -> 프록시는 대체가능해야 함 
+* 서버 객체를 프록시 객체로 대체해도 동작해야 함. -> 프록시는 대체가능해야 함, 모양이 실객체와 같고 실객체를 주입받아서 주요 로직을 실ㅅ
 * 클라이언트는 Interface에만 의존 -> DI를 사용하여 대체 가능
 
-### 예시 코드
+## 데코레이터 패턴
+* decorator들을 항상 꾸며줄 대상이 필요함. 
+  * Component를 내부에 가지고 있고 component의 method를 항상 호출해주어야 함.
+  * Component를 추상클래스로 생성하여서 중복으로 호출되는 부분을 제거
+
+```java
+ Client -- <operation()> --> Decorator -- <operation()> --> RealComponent
+```
+
+### decoreator 예시
+```java
+@Slf4j
+public class MessageDecorator implements Component {
+
+    private Component component;
+
+    public MessageDecorator(Component component) {
+        this.component = component;
+    }
+
+    @Override
+    public String operation() {
+        log.info("MessageDecorator 실행");
+
+        String result = component.operation();
+        String decoResult = "*****" + result + "*****";
+        log.info("MessageDecorator 꾸미기 적용 전 = {}, 적용 후 = {}", result, decoResult);
+        return decoResult;
+    }
+}
+```
+
+### 프록시 체인 구현
+
+```java
+  client --> timeDecorator --> messageDecorator --> realComponent
+```
+```java
+    @Test
+    void decorator2() {
+        Component realComponent = new RealComponent();
+        MessageDecorator messageDecorator = new MessageDecorator(realComponent);
+        TimeDecorator timeDecorator = new TimeDecorator(messageDecorator);
+        DecoratorPatternClient client = new DecoratorPatternClient(timeDecorator);
+
+        client.execute();
+    }
+```
+
+### 프록시 패턴과 데코레이터 패턴 차이
+중요한 것은 의도
+* 프록시 패턴 : for 접근 제어
+* 데코레이터 패턴 : 객체에 대한 기능을 동적으로 추가 for 기능확장
+
+
+## V1에 데코레이터 패턴 적용
+
+```java
+  client --> orderControllerProxy --> orderControllerV1Impl --> orderServiceProxy --> orderServiceV1Impl
+```
+
+* 실제 객체 대신에 Interface를 구현한 Proxy 구현체를 client의 request의 전방에 세운다
+* 스프링 빈을 등록할 떄, proxy 객체를 등록한다. 
+```java
+@Configuration
+public class InterfaceProxyConfig {
+
+    @Bean
+    public OrderControllerV1 OrderController(LogTrace logTrace) {
+        OrderControllerV1Impl controllerImpl = new OrderControllerV1Impl(orderService(logTrace));
+        return new OrderControllerInterfaceProxy(controllerImpl, logTrace);
+    }
+
+    @Bean
+    public OrderServiceV1 orderService(LogTrace logTrace) {
+        OrderServiceV1Impl serviceImpl = new OrderServiceV1Impl(orderRepository(logTrace));
+        return new OrderServiceInterfaceProxy(serviceImpl, logTrace);
+    }
+
+    @Bean
+    public OrderRepositoryV1 orderRepository(LogTrace logTrace) {
+        OrderRepositoryV1Impl repositoryImpl = new OrderRepositoryV1Impl();
+        return new OrderRepositoryInterfaceProxy(repositoryImpl, logTrace);
+    }
+
+}
+```
+프록시 객체는 `스프링 컨테이너가 관리 + Java 힙 메모리에 올라감` But 실제 객체는 Java 힙 메모리에는 올라가지만 스프링 컨테이너가 관리하지는 않는다.
 
 
