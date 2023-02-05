@@ -145,3 +145,125 @@ public class InterfaceProxyConfig {
 프록시 객체는 `스프링 컨테이너가 관리 + Java 힙 메모리에 올라감` But 실제 객체는 Java 힙 메모리에는 올라가지만 스프링 컨테이너가 관리하지는 않는다.
 
 
+## 인테페이스 기반 프록시 / 클래스 기반 프록시
+* 인터페이스 기반의 프록시 : 인터페이스를 implements 하여서 구현
+```java
+@RequiredArgsConstructor
+public class OrderRepositoryInterfaceProxy implements OrderRepositoryV1 {
+    private final OrderRepositoryV1 target;
+    private final LogTrace logTrace;
+    @Override
+    public void save(String itemId) {
+        TraceStatus status = null;
+        try{
+            status = logTrace.begin("OrderRepository.request()");
+            // target 호출
+            target.save(itemId);
+            logTrace.end(status);
+        } catch (Exception e) {
+            logTrace.exception(status, e);
+            throw e;
+        }
+    }
+}
+```
+* 클래스 기반 프록시 : 클래스를 상속 받아서 구₩
+```java
+public class OrderRepositoryConcreteProxy extends OrderRepositoryV2 {
+
+    private final OrderRepositoryV2 target;
+    private final LogTrace logTrace;
+
+    public OrderRepositoryConcreteProxy(OrderRepositoryV2 target, LogTrace trace) {
+        this.target = target;
+        this.logTrace = trace;
+    }
+
+    @Override
+    public void save(String itemId) {
+        TraceStatus status = null;
+        try{
+            status = logTrace.begin("OrderRepository.request()");
+            // target 호출
+            target.save(itemId);
+            logTrace.end(status);
+        } catch (Exception e) {
+            logTrace.exception(status, e);
+            throw e;
+        }
+    }
+}
+```
+
+### 클래스 기반 프록시의 유의사항
+상속이라는 특성 때문에 상속 받을때, 부모 생성자를 호출해야한다 `super()`
+프록시는 말그대로 실제 객체가 아닌 대리자일뿐 부모 객체의 기능을 사용하지 않는 경우, 위의 상속의 특성을 고려하여 자바 문법 처리를 해주어야 한다.
+```java
+public class OrderServiceConcreteProxy extends OrderServiceV2 {
+
+    private final OrderServiceV2 target;
+    private final LogTrace logTrace;
+
+    public OrderServiceConcreteProxy(OrderRepositoryV2 orderRepository, OrderServiceV2 target, LogTrace logTrace) {
+        super(null); //프록시 역할만 할것이기 때문에, 하지만 자바 문법상 필요!!
+        this.target = target;
+        this.logTrace = logTrace;
+    }
+```
+* OrderRepository를 부모 클래스에서 주입받는데 자식 프록시 클래스에서는 사용하지 않기 때문에 (`target.orderItem()`을 할것이기 때문에) `super()`에 파라미터를 null로 전달하여서 자바의 문법적 오류를 해결해준다.
+
+
+## 동적 프록시
+* 이전의 리플렉션은 부가기능 대상 코드 만큼 로그 추적을 위한 클래스를 만들어야 한다는 단점이 있음
+* JDK 동적 프록시 기술이나 CDGLIB 프록시 생성 오픈소스를 활용 -> 프록시 객체를 동적으로 생성가능
+* 프록시를 적용할 객체 하나만 생성 후, 프록시 기술을 사용해서 프록시 객체를 생성
+
+### 리플렉션
+클래스나 메서드의 메타정보를 사용해서 동적으로 호출하는 메서드
+```java
+// 클래스 메타정보 획득
+Class<?> classHello = Class.forName("hello.proxy.jdkdynamic.ReflectionTest$Hello");
+
+Hello target = new Hello();
+// callA 메서드 정보
+Method methodCallA = classHello.getMethod("callA");  // 해당 클래스의 메서드 메타정보
+Object result1 = methodCallA.invoke(target); // 메서드 메타정보로 실제 인스턴스를 호출 가능
+log.info("result1={}", result1);
+```
+* 공통 메서드를 `Method` 클래스로 추상화 -> 언제든 내용을 갈아끼울 수 있음 -> 공통화 시키는 것이 가능해짐
+
+```java
+    @Test
+    void reflection2() throws Exception {
+        // 클래스 메타정보 획득
+        Class<?> classHello = Class.forName("hello.proxy.jdkdynamic.ReflectionTest$Hello");
+
+        Hello target = new Hello();
+        // callA 메서드 정보
+        Method methodCallA = classHello.getMethod("callA");  // 해당 클래스의 메서드 메타정보
+        dynamicCall(methodCallA, target);
+
+        // callB 메서드 정보
+        Method methodCallB = classHello.getMethod("callB");
+        dynamicCall(methodCallB, target);
+    }
+
+    private void dynamicCall(Method method, Object target) throws Exception {
+        log.info("start");
+        Object result = method.invoke(target);
+        log.info("result={}", result);
+    }
+```
+* `dynamicCall()` 
+  * method : 메타정보를 통해서 호출할 메서드의 정보가 동적으로 넘어옴
+  * target : 실제 실행할 인스턴스 정보가 넘어옴 method가 target 클래스에 있는 메서드가 아니면 오류 발
+
+##### 리플렉션은 가급적으로 사용하지 않아야한다
+```java
+classHello.getMethod("callAaaaaaaa잘못씀");
+```
+* 컴파일 시점에 오류가 나는 것이 아니라, 런타임 시점에 오류가 발생한다. 
+
+### JDK 동적 프록시
+런타임에 JDK가 개발자 대신에 프록시 객체를 생성
+

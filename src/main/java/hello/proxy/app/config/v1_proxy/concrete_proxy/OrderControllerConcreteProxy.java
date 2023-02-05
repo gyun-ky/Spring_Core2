@@ -1,21 +1,26 @@
-package hello.proxy.app.config.v1_proxy.interface_proxy;
+package hello.proxy.app.config.v1_proxy.concrete_proxy;
 
-import hello.proxy.app.v1.OrderControllerV1;
+import hello.proxy.app.v2.OrderControllerV2;
+import hello.proxy.app.v2.OrderServiceV2;
 import hello.proxy.trace.TraceStatus;
 import hello.proxy.trace.logtrace.LogTrace;
-import lombok.RequiredArgsConstructor;
 
-@RequiredArgsConstructor
-public class OrderControllerInterfaceProxy implements OrderControllerV1 {
+public class OrderControllerConcreteProxy extends OrderControllerV2 {
 
-    private final OrderControllerV1 target;
+    private final OrderControllerV2 target;
     private final LogTrace logTrace;
+
+    public OrderControllerConcreteProxy(OrderControllerV2 target, LogTrace logTrace) {
+        super(null);
+        this.target = target;
+        this.logTrace = logTrace;
+    }
 
     @Override
     public String request(String itemId) {
         TraceStatus status = null;
         try{
-            status = logTrace.begin("OrderProxyController.request()");
+            status = logTrace.begin("OrderConcreteController.request()");
             // target 호출
             String result = target.request(itemId);
             logTrace.end(status);
@@ -24,7 +29,6 @@ public class OrderControllerInterfaceProxy implements OrderControllerV1 {
             logTrace.exception(status, e);
             throw e;
         }
-
     }
 
     @Override
