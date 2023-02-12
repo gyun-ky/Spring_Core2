@@ -219,7 +219,7 @@ public class OrderServiceConcreteProxy extends OrderServiceV2 {
 * 프록시를 적용할 객체 하나만 생성 후, 프록시 기술을 사용해서 프록시 객체를 생성
 
 ### 리플렉션
-클래스나 메서드의 메타정보를 사용해서 동적으로 호출하는 메서드
+클래스나 메서드의 `메타정보`를 사용해서 동적으로 호출하는 메서드
 ```java
 // 클래스 메타정보 획득
 Class<?> classHello = Class.forName("hello.proxy.jdkdynamic.ReflectionTest$Hello");
@@ -266,4 +266,70 @@ classHello.getMethod("callAaaaaaaa잘못씀");
 
 ### JDK 동적 프록시
 런타임에 JDK가 개발자 대신에 프록시 객체를 생성
+* 프록시에 적용할 로직은 `InvocateHandler` 인터페이스에 구현해서 작성
+  * `Object proxy` 프록시 자신
+  * `Method method` 호출한 메서드
+  * `Object[] args` 메서드를 호출할 때 전달한 인수
+
+* 단점
+  * 인터페이스가 필수적임
+
+### CGLIB
+바이트 코드를 조작해서 동적으로 동적프록시를 생성해내는 라이브러리
+
+CGLIB는 `대상클래스$$EnhancerByCGLIB$$임의코드` 이름의 프록시 객체를 생성
+* 프록시에 적용할 로직은 `MethodInterceptor` 인터페이스에 구현해서 작성
+  * `obj` CGLIB가 적용된 객체
+  * `method` 호출된 메서드
+  * `args` 메서드를 호출하면서 전달된 인수
+  * `proxy` 메서드 호출에 사정 
+
+* 제약
+  * 부모 클래스의 생성자를 체크해야 함
+    * CGLIB가 상속을 통해서 동적으로 객체를 생성하기 때문에 부모 클래스에는 기본 생성자가 필요함
+  * 클래스에 `final` 키워드가 붙으면 상속이 불가능
+  * 메서드에 `final` 키워드가 붙으면 해당 메서드 오버라이딩 불가
+
+### JDK 동적 프록시 & CGLIB 한계?
+* 인터페이스가 있으면 JDK 동적 프록시, 인터페이스가 없으면 CGLIB! 언제나 인터페이스 유무에 따라 관련 객체들을 생성해내기에 어렵다
+* 특정 조건에 맞을 때, 해당 프록시 기술을 적용하여 제공하는 그런 라이브러리는 없을까?
+
+## 프록시 팩토리
+스프링이 지원하는 프록시 기술
+
+동적 프록시를 통합해서 편리하게 만들어주는 `ProxyFactory` 기능 제공
+
+* 인터페이스가 있으면 JDK 동적 프록시 사용
+* 구체 클래스인 경우에는 CGLIB 사용
+
+```java
+package org.appliance.intercept;
+
+public interface MethodInterceptor extends Interceptor {
+    Object invoke(MEhodInvocation invocation) throws Throwable;
+}
+```
+* invocation
+  * 메서드 호출 방법
+  * 현재 프록시 객체 인스턴스
+  * 메서드 파라미터
+  * 메서드 정보
+* Inerceptor 상속 / Interceptor는 Advice 상속
+
+#### Advice 도입
+* `InvocationHandler`와 `MethodInterceptor`는 `Advice`를 호출
+* 개발자는 로직은 `Advice`에, 프록시 생성은 `proxyFactory`를 통해
+* Spring은 handler들을 모두 세팅을 해놓음 
+
+```java
+client -> jdk proxy -> adviceInvocationHandler -> Advice -> target
+```
+```java
+client -> cglib proxy -> adviceMethodInterceptor -> Advice -> target
+```
+
+#### PointCut
+특정 조건에 맞을 때, 프록시 로직을 적용하는 방법
+
+
 
