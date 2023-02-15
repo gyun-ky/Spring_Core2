@@ -167,7 +167,7 @@ public class OrderRepositoryInterfaceProxy implements OrderRepositoryV1 {
     }
 }
 ```
-* 클래스 기반 프록시 : 클래스를 상속 받아서 구₩
+* 클래스 기반 프록시 : 클래스를 상속 받아서 구현
 ```java
 public class OrderRepositoryConcreteProxy extends OrderRepositoryV2 {
 
@@ -197,6 +197,7 @@ public class OrderRepositoryConcreteProxy extends OrderRepositoryV2 {
 
 ### 클래스 기반 프록시의 유의사항
 상속이라는 특성 때문에 상속 받을때, 부모 생성자를 호출해야한다 `super()`
+
 프록시는 말그대로 실제 객체가 아닌 대리자일뿐 부모 객체의 기능을 사용하지 않는 경우, 위의 상속의 특성을 고려하여 자바 문법 처리를 해주어야 한다.
 ```java
 public class OrderServiceConcreteProxy extends OrderServiceV2 {
@@ -214,11 +215,11 @@ public class OrderServiceConcreteProxy extends OrderServiceV2 {
 
 
 ## 동적 프록시
-* 이전의 리플렉션은 부가기능 대상 코드 만큼 로그 추적을 위한 클래스를 만들어야 한다는 단점이 있음
-* JDK 동적 프록시 기술이나 CDGLIB 프록시 생성 오픈소스를 활용 -> 프록시 객체를 동적으로 생성가능
-* 프록시를 적용할 객체 하나만 생성 후, 프록시 기술을 사용해서 프록시 객체를 생성
+* 정적 프록시 객체 생성은 기능 대상 코드 만큼 클래스를 만들어야 한다는 단점이 있음
+* JDK 동적 프록시 기술이나 CGLIB 프록시 생성 오픈소스를 활용 -> 프록시 객체를 동적으로 생성가능
+* 프록시를 적용할 대상 객체 하나만 생성 후, 프록시 기술을 사용해서 프록시 객체를 생성
 
-### 리플렉션
+### Relection
 클래스나 메서드의 `메타정보`를 사용해서 동적으로 호출하는 메서드
 ```java
 // 클래스 메타정보 획득
@@ -256,7 +257,7 @@ log.info("result1={}", result1);
 ```
 * `dynamicCall()` 
   * method : 메타정보를 통해서 호출할 메서드의 정보가 동적으로 넘어옴
-  * target : 실제 실행할 인스턴스 정보가 넘어옴 method가 target 클래스에 있는 메서드가 아니면 오류 발
+  * target : 실제 실행할 인스턴스 정보가 넘어옴 method가 target 클래스에 있는 메서드가 아니면 오류 발생
 
 ##### 리플렉션은 가급적으로 사용하지 않아야한다
 ```java
@@ -267,22 +268,94 @@ classHello.getMethod("callAaaaaaaa잘못씀");
 ### JDK 동적 프록시
 런타임에 JDK가 개발자 대신에 프록시 객체를 생성
 * 프록시에 적용할 로직은 `InvocateHandler` 인터페이스에 구현해서 작성
+```java
+public class TimeInvocationHandler implements InvocationHandler {
+
+    private final Object target;
+
+    public TimeInvocationHandler(Object target) {
+        this.target = target;
+    }
+
+    @Override
+    public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+        log.info("TimeProxy 실행");
+        long startTime = System.currentTimeMillis();
+
+        Object result = method.invoke(target, args); // 리플랙션을 사용해서 타겟 인스턴스를 실행
+
+        long endTime = System.currentTimeMillis();
+        long resultTime = endTime - startTime;
+        log.info("TimeProxy 종료 resultTime = {}", resultTime);
+        return result;
+
+    }
+}
+```
   * `Object proxy` 프록시 자신
   * `Method method` 호출한 메서드
   * `Object[] args` 메서드를 호출할 때 전달한 인수
 
+
+
+Proxy를 사용하여 프록시 생성
+```java
+AInterface target = new AImpl();
+TimeInvocationHandler handler = new TimeInvocationHandler(target);
+
+// 동적으로 프록시 객체 생성
+AInterface proxy =(AInterface) Proxy.newProxyInstance(AInterface.class.getClassLoader(), new Class[]{AInterface.class}, handler);
+
+proxy.call(); 
+```
+
 * 단점
-  * 인터페이스가 필수적임
+  * interface가 필수적임
 
 ### CGLIB
-바이트 코드를 조작해서 동적으로 동적프록시를 생성해내는 라이브러리
+바이트 코드를 조작해서 동적으로 프록시를 생성해내는 라이브러리
 
 CGLIB는 `대상클래스$$EnhancerByCGLIB$$임의코드` 이름의 프록시 객체를 생성
 * 프록시에 적용할 로직은 `MethodInterceptor` 인터페이스에 구현해서 작성
+```java
+public class TimeMethodInterceptor implements MethodInterceptor {
+
+    private final Object target;
+
+    public TimeMethodInterceptor(Object target) {
+        this.target = target;
+    }
+
+    @Override
+    public Object intercept(Object obj, Method method, Object[] args, MethodProxy methodProxy) throws Throwable {
+        log.info("TimeProxy 실행");
+        long startTime = System.currentTimeMillis();
+
+        Object result = methodProxy.invoke(target, args);
+        //Object result = method.invoke(target, args); // 해당도 사용가능하지만 위에가 더 최적화가 되어서 빠르다고 함
+
+        long endTime = System.currentTimeMillis();
+        long resultTime = endTime - startTime;
+        log.info("TimeProxy 종료 resultTime = {}", resultTime);
+        return result;
+    }
+}
+```
   * `obj` CGLIB가 적용된 객체
   * `method` 호출된 메서드
   * `args` 메서드를 호출하면서 전달된 인수
   * `proxy` 메서드 호출에 사정 
+
+Enhancer를 사용하여 프록시 생성
+```java
+ConcreteService target = new ConcreteService();
+
+Enhancer enhancer = new Enhancer();
+enhancer.setSuperclass(ConcreteService.class); // 어떤 구체 클래스를 상속 받아서 프록시를 생성할지 지정
+enhancer.setCallback(new TimeMethodInterceptor(target)); //위에서 지정해준 class 객체를 상속 받아서 프록시 객체를 동적으로 생성
+ConcreteService proxy = (ConcreteService) enhancer.create();
+
+```
 
 * 제약
   * 부모 클래스의 생성자를 체크해야 함
@@ -294,6 +367,8 @@ CGLIB는 `대상클래스$$EnhancerByCGLIB$$임의코드` 이름의 프록시 �
 * 인터페이스가 있으면 JDK 동적 프록시, 인터페이스가 없으면 CGLIB! 언제나 인터페이스 유무에 따라 관련 객체들을 생성해내기에 어렵다
 * 특정 조건에 맞을 때, 해당 프록시 기술을 적용하여 제공하는 그런 라이브러리는 없을까?
 
+
+
 ## 프록시 팩토리
 스프링이 지원하는 프록시 기술
 
@@ -302,24 +377,50 @@ CGLIB는 `대상클래스$$EnhancerByCGLIB$$임의코드` 이름의 프록시 �
 * 인터페이스가 있으면 JDK 동적 프록시 사용
 * 구체 클래스인 경우에는 CGLIB 사용
 
+
+ProxyFactory는 cglib의 MethodInterceptor가 아닌 `appliance.interceptor`를 상속 받은 MethodInterceptor를 사용한다.  
 ```java
 package org.appliance.intercept;
 
 public interface MethodInterceptor extends Interceptor {
-    Object invoke(MEhodInvocation invocation) throws Throwable;
+    Object invoke(MethodInvocation invocation) throws Throwable;
 }
 ```
-* invocation
+* invocation가 가지고 있는 정보들
   * 메서드 호출 방법
   * 현재 프록시 객체 인스턴스
   * 메서드 파라미터
   * 메서드 정보
-* Inerceptor 상속 / Interceptor는 Advice 상속
+
+
 
 #### Advice 도입
+* 프록시가 호출하는 부가기능 == 프록시 로직
 * `InvocationHandler`와 `MethodInterceptor`는 `Advice`를 호출
-* 개발자는 로직은 `Advice`에, 프록시 생성은 `proxyFactory`를 통해
-* Spring은 handler들을 모두 세팅을 해놓음 
+* 개발자는 로직은 `Advice`에, 프록시 생성은 `proxyFactory`를 통해!
+* Spring은 handler들을 모두 세팅을 해놓음
+
+
+MethodInterceptor를 상속받아서 Advice 등록
+```java
+@Slf4j
+public class TimeAdvice implements MethodInterceptor {
+    @Override
+    public Object invoke(MethodInvocation invocation) throws Throwable {
+        log.info("TimeProxy 실행");
+        long startTime = System.currentTimeMillis();
+
+        Object result = invocation.proceed(); // 타겟을 찾아서 실행해줌
+        // target 클래스를 호출하고 결과를 반환 받는다. target 클래스 정보는 invocation에 모두 포함
+        // proxyFactory 생성 과정에서 타겟 정보를 넘김
+
+        long endTime = System.currentTimeMillis();
+        long resultTime = endTime - startTime;
+        log.info("TimeProxy 종료 resultTime={}", resultTime);
+        return result;
+    }
+}
+```
 
 ```java
 client -> jdk proxy -> adviceInvocationHandler -> Advice -> target
@@ -329,7 +430,41 @@ client -> cglib proxy -> adviceMethodInterceptor -> Advice -> target
 ```
 
 #### PointCut
-특정 조건에 맞을 때, 프록시 로직을 적용하는 방법
+특정 조건에 맞을 때, 프록시 로직을 적용하는 방법 -> 부가기능을 적용할지에 대한 필터링
+
+* Advisor 
+  * 하나의 PointCut과 하나의 Advice를 가지고 있는 것
+  * 어디에 어떠한 부가기능 로직을 적용할지 모두 알고 있는 객체
+
+* PointCut과 Advice를 나누는 이유
+  * 단일 책임 원칙을 지키기 위해
+  * Advice 안에서 분기처리를 통해 PointCut의 역할을 한다면 부가기능을 제안하는 객체가 두가지의 기능을 모두 가지게 된다. -> 단일 책임 원칙에 위배
+
+
+```java
+client -> <<service>> proxy -> target Service
+            - PointCut : 필터
+            - Advice : 부가기능 
+```
+
+Advisor에 PointCut, Advice 적용 후 proxyFactory에 적용하기
+```java
+    @Test
+    void advisorTest1() {
+        ServiceInterface target = new ServiceImpl();
+        ProxyFactory proxyFactory = new ProxyFactory(target);
+        DefaultPointcutAdvisor advisor = new DefaultPointcutAdvisor(Pointcut.TRUE, new TimeAdvice()); // 항상 참인 pointcut 사용
+        proxyFactory.addAdvisor(advisor);
+        ServiceInterface proxy = (ServiceInterface) proxyFactory.getProxy();
+
+        proxy.save();
+        proxy.find();
+    }
+```
+* `DefaultPointCutAdvisor` : Advisor 인터페이스의 가장 일반적인 구현체, 하나의 포인트컷과 하나의 어드바이스를 넣어준다 -> 어디에 해당 어드바이스를 사용할 수 있을지 알려주는 객체
+* `addAdvisor` : proxyFactory가 어떠한 Advisor를 채택해야하는지 알려주는 메서드 
+
+
 
 
 
