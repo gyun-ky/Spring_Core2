@@ -465,6 +465,32 @@ Advisor에 PointCut, Advice 적용 후 proxyFactory에 적용하기
 * `addAdvisor` : proxyFactory가 어떠한 Advisor를 채택해야하는지 알려주는 메서드 
 
 
+##### 스프링이 제공하는 PointCut 종류
+* NameMatchMethodPointCut : 메서드 이름 기반
+* AnnotationMatchPointCut : 어노테이션 기반
+* AspectJExpressionPointCut : aspectJ 표현식으로 매칭 --> 중요!!
+
+##### 하나의 Target에 여러 Advisor 적용하는 방법
+스프링은 AOP 적용시, 최적화를 진행하여 proxy는 하나만 생성, 하나의 프록시에 여러 advisor를 적용
+
+`taget`에 여러개의 AOP가 동시 적용되어도 `target`마다 하나의 proxy만 생성
+
+### 문제
+* 설정이 너무 많음 -> 스프링 빈과 1:1이므로 스프링빈이 100개면 100개의 동적 프록시 생성 config 코드를 작성해주어야 함
+* 기존에 있는 컴포넌트 스캔 못한다 -> proxy를 bean으로 등록하는게 하니라 실제 사용되는 실객체를 bean으로 등록해버림!
+  * -> 지금까지의 방법으로는 결국 실객체를 컨테이너 빈에 등록하는 것이 아니라, proxy를 실제 객체대신 스프링 빈에 등록해야함!!
+
+
+## 빈 후처리기 BeanPostProcessor
+빈이 등록되는 순서
+1. `@Bean` 혹은 컴포넌트 스캔으로 빈 대상 객체 탐색
+2. 대상 객체를 생성
+3. 스프링 빈저장소에 빈이름-빈객체 key-value 형태로 저장
+
+빈 후처리기는 2번에서 생성된 객체를 빈저장소에 등록하기 직전에 조작하기 위한 장치
+
+객체를 조작 / 다른 객체로 바꿔치기 가능
+
 
 
 
